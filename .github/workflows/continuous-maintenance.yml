@@ -1,0 +1,37 @@
+name: OmniRoute Continuous Maintenance
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
+permissions:
+  contents: read
+  issues: write
+jobs:
+  upstream-watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check upstream default branch for changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          upstream_sha="$(git ls-remote https://github.com/diegosouzapw/OmniRoute.git HEAD | cut -f1)"
+          local_sha="$(git rev-parse HEAD)"
+          echo "Upstream HEAD: $upstream_sha"
+          echo "Fork default branch HEAD: $local_sha"
+          if [ "$upstream_sha" = "$local_sha" ]; then
+            echo "Already at upstream HEAD"
+            exit 0
+          fi
+          title="OmniRoute upstream update review"
+          existing="$(gh issue list --repo "$REPO" --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          body="$(printf 'Automated daily check detected a possible upstream difference.\n\nUpstream HEAD: `%s`\nFork HEAD: `%s`\n\nReview upstream changes and test before merging or deploying. This job does not auto-merge, change secrets, or redeploy Railway.\n' "$upstream_sha" "$local_sha")"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$REPO" --body "$body"
+          else
+            gh issue create --repo "$REPO" --title "$title" --body "$body"
+          fi
