@@ -31,7 +31,12 @@ jobs:
           existing="$(gh issue list --repo "$REPO" --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
           body="$(printf 'Automated daily check detected a possible upstream difference.\n\nUpstream HEAD: `%s`\nFork HEAD: `%s`\n\nReview upstream changes and test before merging or deploying. This job does not auto-merge, change secrets, or redeploy Railway.\n' "$upstream_sha" "$local_sha")"
           if [ -n "$existing" ]; then
-            gh issue comment "$existing" --repo "$REPO" --body "$body"
+            old_body="$(gh issue view "$existing" --repo "$REPO" --json body --jq .body)"
+            if [[ "$old_body" != *"$upstream_sha"* ]]; then
+              gh issue edit "$existing" --repo "$REPO" --body "$body"
+            else
+              echo "Upstream SHA unchanged; no issue update"
+            fi
           else
             gh issue create --repo "$REPO" --title "$title" --body "$body"
           fi
